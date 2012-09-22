@@ -8,10 +8,12 @@ function VimServer(opt) {
 	this.maxBufID = 1;
 	this.maxSeqno = 1;
 	this.buffers = [];
-	this.auth = opt.auth || opt.password;
 	this.port = opt.port || 3219;
+	this.auth = typeof opt.auth == "function" ? opt.auth :
+		opt.password ? function (pass) { return pass == opt.password; } :
+		Math.min(); // returns infinity!
 
-	this.server = net.createServer(this.onConnection.bind(this));
+	this.server = net.createServer(this._onConnection.bind(this));
 }
 util.inherits(VimServer, EventEmitter);
 
@@ -30,18 +32,16 @@ VimServer.prototype.listen = function (/* port, hostname, cb */) {
 	this.server.listen(port, hostname, cb);
 };
 
-VimServer.prototype.onConnection = function (socket) {
+VimServer.prototype._onConnection = function (socket) {
 	var vim = new VimClient(this, socket);
 	//console.log("vim client connected.");
 
-	socket.on('end', vim.onDisconnected.bind(vim));
-	socket.on('data', vim.onData.bind(vim));
+	socket.on('end', vim._onDisconnected.bind(vim));
+	socket.on('data', vim._onData.bind(vim));
 };
 
-VimServer.prototype.authClient = function (client, password) {
-	var authed =
-		typeof this.auth == "function" && this.auth(password, client) ||
-		!this.auth || this.auth == password;
+VimServer.prototype._authClient = function (client, password) {
+	var authed = !!this.auth(password, client);
 	if (authed) this.emit("clientAuthed", client);
 	return authed;
 }

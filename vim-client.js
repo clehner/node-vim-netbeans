@@ -162,27 +162,26 @@ function VimClient(server, socket) {
 	this.socket = socket;
 	this.replyHandlers = {};
 	this.keyHandlers = {};
-	this.buffersByPathname = {};
 	this.buffers = [];
 	this.maxBufID = 1;
 	this.maxSeqno = 1;
 }
 util.inherits(VimClient, EventEmitter);
 
-VimClient.prototype.onDisconnected = function () {
+VimClient.prototype._onDisconnected = function () {
 	this.emit("disconnected");
 }
 
-VimClient.prototype.onData = function (data) {
+VimClient.prototype._onData = function (data) {
 	var str = data.toString('utf8');
 	var messages = str.trim().split("\n");
-	messages.forEach(this.onMessage.bind(this));
+	messages.forEach(this._onMessage.bind(this));
 };
 
 var eventRe = /^([0-9]+):([a-zA-Z]+)=([0-9]+)(?: (.*))?$/,
 	replyRe = /^([0-9]+)(?: (.*))?$/;
 
-VimClient.prototype.onMessage = function (message) {
+VimClient.prototype._onMessage = function (message) {
 	// Must be authed before considering events
 	if (this.authed) {
 		var e = eventRe.exec(message);
@@ -202,7 +201,7 @@ VimClient.prototype.onMessage = function (message) {
 		// password is unquoted
 		var pass = message.substr(5);
 		//this.emit("auth", pass);
-		if (this.server.authClient(this, pass)) {
+		if (this.server._authClient(this, pass)) {
 			console.log("vim client logged in");
 			this.authed = true;
 		} else {
@@ -221,19 +220,11 @@ VimClient.prototype._sendCommand = function (bufID, name, args) {
 	console.log('sending command', bufID + ":" + name + "!" + seqno + body);
 };
 
-VimClient.prototype.sendCommand = function (name, args) {
-	this._sendCommand("0", name, args);
-};
-
 VimClient.prototype._sendFunction = function (bufID, name, args, cb) {
 	var seqno = this.maxSeqno++;
 	var body = argsToString(args);
 	this.socket.write(bufID + ":" + name + "/" + seqno + body + "\n");
 	this.replyHandlers[seqno] = cb;
-};
-
-VimClient.prototype.sendFunction = function (name, args, cb) {
-	this._sendFunction("0", args, cb);
 };
 
 VimClient.prototype._processReply = function (seqno, body) {
@@ -248,23 +239,33 @@ VimClient.prototype._processReply = function (seqno, body) {
 
 VimClient.prototype._processEvent = function (bufID, name, seqno, body) {
 	// seqno doesn't really matter for events.
-	var args = [name];
 	var buffer = this.buffers[bufID];
-	if (buffer) args.push(buffer);
+	var args = [name, buffer];
 	if (body) parseArgs(body, args);
 	var builtin = eventHandlers[name];
-	if (builtin) builtin.apply(this, (buffer ? [] : [buffer])
-		.concat(args.slice(1)));
 	//console.log(args);
+	// builtin gets passed the buffer even if it is null
+	if (builtin) builtin.apply(this, args.slice(1));
 	// do we really need to emit it in both places?
-	if (buffer) buffer.emit.apply(buffer, args);
+	if (!buffer) {
+		args.splice(1, 1);
+		//console.log(args);
+	}
 	this.emit.apply(this, args);
+	if (buffer) {
+		args.splice(1, 1);
+		//console.log(args);
+		buffer.emit.apply(buffer, args);
+	}
 };
 
 // register a key handler
 VimClient.prototype.key = function (key, handler) {
+	// don't register duplicates
+	if (!(key in this.keyHandlers)) {
+		this._specialKeys(key);
+	}
 	this.keyHandlers[key] = handler;
-	this.specialKeys(key);
 };
 
 // Built-in event handlers
@@ -276,8 +277,11 @@ var eventHandlers = {
 		buffer = this.buffers[bufID] = new VimBuffer(this, bufID);
 		if (!pathname) pathname = "";
 		buffer.pathname = pathname;
-		console.log("assign buffer id " + bufID + " to " + pathname);
-		this.putBuffer(buffer, pathname);
+		console.log("assign buffer id " + this.id + " to " + this.pathname);
+		// It simplifies things to assign the buffer number here,
+		// but we don't want to listen for document events yet.
+		buffer._putBufferNumber(pathname);
+		buffer.stopDocumentListen();
 		this.emit("newBuffer", buffer);
 	},
 
@@ -300,11 +304,11 @@ var eventHandlers = {
 };
 
 // NetBeans Commands
-VimClient.prototype.create = function () {
+VimClient.prototype.createBuffer = function () {
 	// create a buffer
 	var bufID = this.maxBufID++;
 	var buffer = this.buffers[bufID] = new VimBuffer(this, bufID);
-	buffer.sendCommand("create");
+	buffer._sendCommand("create");
 	// emit newBuffer?
 	return buffer;
 };
@@ -312,70 +316,42 @@ VimClient.prototype.create = function () {
 VimClient.prototype.editFile = function (pathname, cb) {
 	var bufID = this.maxBufID++;
 	var buffer = buffers[bufID] = new VimBuffer(this, bufID);
-	buffer.pathname = pathname;
-	var bufs = this.buffersByPathname;
-	bufs[pathname] = buffer;
-	this._sendCommand(bufID, "editFile", pathname);
+	buffer.editFile(pathname);
 	this.once("fileOpened", function (pathname) {
-		bufs[pathname] = buffer;
-		buffer.pathname = pathname;
+		buffer.pathname = pathname; // todo: test if this is needed
 		cb && cb(buffer);
 	});
 	// emit newBuffer?
 };
 
-VimClient.prototype.putBuffer = function (buffer, pathname) {
+VimClient.prototype._putBuffer = function (buffer, pathname) {
 	this._sendCommand(buffer.id, "putBufferNumber", pathname);
 };
 
 VimClient.prototype.raise = function () {
-	this.sendCommand("raise");
-};
-
-VimClient.prototype.setBuffer = function (buffer, pathname) {
-	this._sendCommand(buffer.id, "setBufferNumber", pathname);
-};
-
-VimClient.prototype.setExitDelay = function (secs) {
-	this.sendCommand("setExitDelay", secs);
+	this._sendCommand(0, "raise");
 };
 
 VimClient.prototype.showBalloon = function (text) {
-	this.sendCommand("showBalloon", text);
+	this._sendCommand(0, "showBalloon", text);
 };
 
-VimClient.prototype.specialKeys = function (keys) {
-	this.sendCommand("specialKeys", keys.join ? keys.join(" ") : keys);
+VimClient.prototype._specialKeys = function (keys) {
+	this._sendCommand(0, "specialKeys", keys);
 };
 
 VimClient.prototype.getCursor = function (cb) {
-	this.sendFunction("getCursor", [], function (bufID, lnum, col, off) {
+	this._sendFunction(0, "getCursor", [], function (bufID, lnum, col, off) {
 		cb(this.buffers[bufID], lnum, col, off);
 	});
 };
 
 VimClient.prototype.getModified = function (cb) {
-	this.sendFunction("getModified", [], cb);
+	this._sendFunction(0, "getModified", [], cb);
 };
 
-VimClient.prototype.insert = function (offset, text, cb) {
-	this.sendFunction("insert", [offset, text], function (msg) {
-		if (msg && msg[0] == '!') {
-			// reply is unquoted
-			var error = msg.substr(1);
-		}
-		cb(error);
-	});
-};
-
-VimClient.prototype.remove = function (offset, text) {
-	this.sendFunction("remove", [offset, text], function (msg) {
-		if (msg && msg[0] == '!') {
-			// reply is unquoted
-			var error = msg.substr(1);
-		}
-		cb(error);
-	});
+VimClient.prototype.saveAndExit = function (cb) {
+	this._sendFunction(0, "saveAndExit", [], cb);
 };
 
 module.exports = VimClient;

@@ -7,6 +7,7 @@ function VimBuffer(client, id) {
 	this.id = id;
 	this.maxAnnoTypeNum = 0;
 	this.maxAnnoSerNum = 0;
+	this.annoTypeNums = {};
 }
 VimBuffer.prototype = {
 	id: -1,
@@ -20,67 +21,66 @@ VimBuffer.prototype.toString = function () {
 	return "[VimBuffer " + this.id + "]";
 };
 
-VimBuffer.prototype.sendCommand = function (name, args) {
+VimBuffer.prototype._sendCommand = function (name, args) {
 	this.client._sendCommand(this.id, name, args);
 };
 
-VimBuffer.prototype.sendFunction = function (name, args, cb) {
+VimBuffer.prototype._sendFunction = function (name, args, cb) {
 	this.client._sendFunction(this.id, name, args, cb);
 };
 
 VimBuffer.prototype.addAnno = function (type, offset) {
-	var typeNum = type.getTypeNumForBuffer(this) || this.defineAnnoType(type);
+	var typeNum = this.annoTypeNums[type.id] || this.defineAnnoType(type);
 	var serNum = this.maxAnnoSerNum++;
-	this.sendCommand("addAnno", [serNum, typeNum, offset, 1]);
+	this._sendCommand("addAnno", [serNum, typeNum, offset, 1]);
 	return serNum;
-	// todo: remove annotype typenum when buffer closes
 };
 
 VimBuffer.prototype.close = function () {
-	this.sendCommand("close");
+	this._sendCommand("close");
 };
 
 VimBuffer.prototype.defineAnnoType = function (type) {
 	var typeNum = this.maxAnnoTypeNum++;
-	type.setTypeNumForBuffer(this, typeNum);
-	this.sendCommand("defineAnnoType",
+	this.annoTypeNums[type.id] = typeNum;
+	this._sendCommand("defineAnnoType",
 		typeNum, type.name, "", type.glyphFile, type.fg, type.bg);
 	return typeNum;
 };
 
 VimBuffer.prototype.editFile = function (pathname) {
 	this.pathname = pathname;
-	this.sendCommand("editFile", pathname);
+	this._sendCommand("editFile", pathname);
 	// is this event possible?
 	// do we need to listen for fileOpened?
 };
 
 VimBuffer.prototype.guard = function (offset, length) {
-	this.sendCommand("guard", [offset, length]);
+	this._sendCommand("guard", [offset, length]);
 };
 
 VimBuffer.prototype.initDone = function () {
-	this.sendCommand("initDone");
+	this._sendCommand("initDone");
 };
 
 VimBuffer.prototype.insertDone = function () {
-	this.sendCommand("insertDone");
+	this._sendCommand("insertDone");
 };
 
 VimBuffer.prototype.netbeansBuffer = function (own) {
-	this.sendCommand("netbeansBuffer", (arguments.length == 0) || !!own);
+	this._sendCommand("netbeansBuffer", (arguments.length == 0) || !!own);
 };
 
 VimBuffer.prototype.removeAnno = function () {
-	this.sendCommand("removeAnno");
+	this._sendCommand("removeAnno");
 };
 
 VimBuffer.prototype.save = function () {
-	this.sendCommand("save");
+	this._sendCommand("save");
 };
 
 VimBuffer.prototype.saveDone = function () {
-	this.sendCommand("saveDone");
+	this._sendCommand("saveDone");
 };
 
 VimBuffer.prototype.setDot = function (offset) {
@@ -88,68 +88,84 @@ VimBuffer.prototype.setDot = function (offset) {
 		// lnum/col
 		offset += "/" + arguments[1];
 	}
-	this.sendCommand("setDot", offset);
+	this._sendCommand("setDot", offset);
 };
 
 VimBuffer.prototype.setFullName = function (pathname) {
 	this.pathname = pathname;
-	this.sendCommand("setFullName", pathname);
+	this._sendCommand("setFullName", pathname);
 };
 
 VimBuffer.prototype.setModified = function (isModified) {
-	this.sendCommand("setModified", !!isModified);
+	this._sendCommand("setModified", !!isModified);
 };
 
 VimBuffer.prototype.setModtime = function (time) {
-	this.sendCommand("setModtime", time);
+	this._sendCommand("setModtime", time);
 };
 
 VimBuffer.prototype.setReadOnly = function () {
-	this.sendCommand("setReadOnly");
+	this._sendCommand("setReadOnly");
 };
 
 VimBuffer.prototype.setTitle = function (title) {
 	// when is this needed?
 	this.title = title;
-	this.sendCommand("setTitle", title);
+	this._sendCommand("setTitle", title);
 };
 
 VimBuffer.prototype.setVisible = function (isVisible) {
-	this.sendCommand("setVisible", !!isVisible);
+	this._sendCommand("setVisible", !!isVisible);
 };
 
 VimBuffer.prototype.startDocumentListen = function () {
-	this.sendCommand("startDocumentListen");
+	this._sendCommand("startDocumentListen");
 };
 
 VimBuffer.prototype.stopDocumentListen = function () {
-	this.sendCommand("stopDocumentListen");
+	this._sendCommand("stopDocumentListen");
 };
 
 VimBuffer.prototype.unguard = function () {
-	this.sendCommand("unguard");
+	this._sendCommand("unguard");
 };
 
 VimBuffer.prototype.getLength = function (cb) {
-	this.sendFunction("getLength", cb);
+	this._sendFunction("getLength", cb);
 };
 
 VimBuffer.prototype.getAnno = function (serNum, cb) {
-	this.sendFunction("getAnno", serNum, cb);
+	this._sendFunction("getAnno", serNum, cb);
 };
 
 VimBuffer.prototype.getModified = function (cb) {
-	this.sendFunction("getModified", [], cb);
+	this._sendFunction("getModified", [], cb);
 };
 
 VimBuffer.prototype.getText = function (cb) {
-	this.sendFunction("getText", [], function (quotedText) {
+	this._sendFunction("getText", [], function (quotedText) {
 		cb(parseArgs(quotedText)[0]);
 	});
 };
 
-VimBuffer.prototype.saveAndExit = function (cb) {
-	this.sendFunction("saveAndExit", [], cb);
+VimBuffer.prototype.insert = function (offset, text, cb) {
+	this._sendFunction("insert", [offset, text], function (msg) {
+		if (msg && msg[0] == '!') {
+			// reply is unquoted
+			var error = msg.substr(1);
+		}
+		cb(error);
+	});
+};
+
+VimBuffer.prototype.remove = function (offset, text) {
+	this._sendFunction("remove", [offset, text], function (msg) {
+		if (msg && msg[0] == '!') {
+			// reply is unquoted
+			var error = msg.substr(1);
+		}
+		cb(error);
+	});
 };
 
 module.exports = VimBuffer;
