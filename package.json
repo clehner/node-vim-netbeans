@@ -1,11 +1,11 @@
 {
   "name": "vim-server",
-  "version": "0.0.0",
-  "description": "A server for Vim clients using the Vim NetBeans Protocol.",
+  "version": "0.1.0",
+  "description": "A server for Vim clients using the NetBeans Protocol.",
   "main": "index.js",
   "repository": {
     "type": "git",
-    "url": "git://github.com/clehner/node-vim-server.git"
+    "url": "git://github.com/clehner/node-vim-netbeans.git"
   },
   "keywords": [
     "vim",
