@@ -19,7 +19,6 @@ Usage
 var nb = require("vim-netbeans");
 var server = new nb.VimServer();
 server.on("clientAuthed", function (vim) {
-
 	vim.on("insert", function (buffer, offset, text) {
 		console.log("Inserted text at " + offset + ": " + text);
 	});
