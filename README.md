@@ -10,10 +10,10 @@ The protocol is named NetBeans for historical reasons, and does not actually req
 Installation
 ------------
 
-    [sudo] npm install vim-netbeans
+    npm install vim-netbeans
 
-Example
--------
+Usage
+-----
 
 ```js
 var nb = require("vim-netbeans");
@@ -31,14 +31,14 @@ server.on("clientAuthed", function (vim) {
 server.listen();
 ```
 
-See `example.js` for a longer example.
+See `example.js` for a larger example.
 
 Connecting
 ----------
 
 To connect to your NetBeans server, launch Vim with `-nb` or use the command `:nbs` in Vim.  To close the connection, Use `:nbc`.
 
-Host, port, and password can be specified with :nbs:{hostname}:{port}:{password}
+Host, port, and password can be specified with `:nbs:{hostname}:{port}:{password}`
 
 Connection information can also be read from a file or environment. See the [Vim Documentation](http://vimdoc.sourceforge.net/htmldoc/netbeans.html#netbeans-run).
 
@@ -157,17 +157,18 @@ Represents a Vim program that has connected to a VimServer.
 In addition to these events, a VimClient also receives events for buffers that it has control of, with the VimBuffer object added as the first argument.
 
 This allows you to do this:
-
-    client.on("insert", function (buffer, text, offset) {...});
-    client.on("remove", function (buffer, text, offset) {...});
+```js
+client.on("insert", function (buffer, text, offset) {...});
+client.on("remove", function (buffer, text, offset) {...});
+```
 
 instead of this:
-
-    client.on("newBuffer", function (buffer) {
-        buffer.on("insert", function (text, offset) {...});
-        buffer.on("remove", function (text, offset) {...});
-    });
-
+```js
+client.on("newBuffer", function (buffer) {
+	buffer.on("insert", function (text, offset) {...});
+	buffer.on("remove", function (text, offset) {...});
+});
+```
 
 VimBuffer
 ---------
