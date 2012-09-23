@@ -5,22 +5,20 @@ var util = require('util'),
 
 function VimServer(opt) {
 	if (!opt) opt = {};
-	this.maxBufID = 1;
-	this.maxSeqno = 1;
-	this.buffers = [];
 	this.port = opt.port || 3219;
+	this.debug = !!opt.debug;
 	this.auth = typeof opt.auth == "function" ? opt.auth :
 		opt.password ? function (pass) { return pass == opt.password; } :
-		Math.min(); // returns infinity!
+		function () { return true; };
 
 	this.server = net.createServer(this._onConnection.bind(this));
 }
 util.inherits(VimServer, EventEmitter);
 
-VimServer.prototype.listen = function (/* port, hostname, cb */) {
-	var arguments = Array.prototype.slice.call(arguments);
+VimServer.prototype.listen = function listen(/* port, hostname, cb */) {
+	var arguments = Array.prototype.slice.call(listen.arguments);
 	var port = this.port, hostname, cb;
-	arguments.forEach(function (arg) {
+	listen.arguments.forEach(function (arg) {
 		if (typeof arg === 'function') {
 			cb = arg;
 		} else if (typeof arg === 'string' && isNaN(arg)) {

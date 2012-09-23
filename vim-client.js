@@ -20,8 +20,9 @@ function parseArgs(str, args) {
 	if (!args) args = [];
 
 	for (var i = 0; i <= str.length; i++) {
-		// add extra space at the end to allow tokens to close
+		// use space for eof
 		var char = str[i] || ' ';
+
 		switch(state) {
 			case betweenArgsState:
 				tokStart = i - 1;
@@ -52,7 +53,7 @@ function parseArgs(str, args) {
 			case inUnquotedStringState:
 				if (char == ' ') {
 					state = betweenArgsState;
-					args.push(str.substring(tokStart, i-1));
+					args.push(str.substring(tokStart, i));
 				}
 			break;
 
@@ -92,8 +93,8 @@ function parseArgs(str, args) {
 					default:
 						tokStr += '\\' + char;
 					break;
-					state = inStringState;
 				}
+				state = inStringState;
 			break;
 
 			case inNumberState:
@@ -101,7 +102,7 @@ function parseArgs(str, args) {
 					args.push(Number(str.substring(tokStart, i)));
 					state = betweenArgsState;
 				} else if ((char < '0' || char > '9') && char != '.') {
-					// this shouldn't happen
+					// not a number after all
 					state = inUnquotedStringState;
 				}
 			break;
@@ -120,12 +121,13 @@ function parseArgs(str, args) {
 				if (char == ' ') {
 					state = betweenArgsState;
 				}
-				// otherwise ignore it!
+				// otherwise ignore it
 			break;
 		}
+		//console.log(state, char);
 	}
 
-	//console.log('parsing args', str, args);
+	//console.log(str);
 	return args;
 }
 
@@ -138,9 +140,9 @@ var backslashRe = /\\/g,
 
 // quote strings for sending over the wire
 function quoteArg(item) {
+	if (item == -Infinity) return "none"; // color sentinel
 	if (typeof item == "number") return item.toString();
 	if (typeof item == "boolean") return item ? "T" : "F";
-	if (item === null) return "none"; // for colors
 	if (!item) return '""';
 	return '"' + (item.toString().
 		replace(backslashRe, '\\\\').
@@ -151,10 +153,13 @@ function quoteArg(item) {
 		replace(doubleQuoteRe, '\\"')) + '"';
 }
 
+function isArray(arr) {
+	return Object.prototype.toString.call(arr) == "[object Array]";
+}
+
 function argsToString(args) {
 	return typeof args != "undefined" ? " " +
-		(Object.prototype.toString.call(args) == "[object Array]" ?
-			args.map(quoteArg).join(" ") : quoteArg(args)) : "";
+		(isArray(args) ?  args.map(quoteArg).join(" ") : quoteArg(args)) : "";
 }
 
 function VimClient(server, socket) {
@@ -163,18 +168,21 @@ function VimClient(server, socket) {
 	this.replyHandlers = {};
 	this.keyHandlers = {};
 	this.buffers = [];
+	this.buffersByPathname = {};
 	this.maxBufID = 1;
 	this.maxSeqno = 1;
+	this.debug = server.debug;
 }
 util.inherits(VimClient, EventEmitter);
 
 VimClient.prototype._onDisconnected = function () {
 	this.emit("disconnected");
+	this._cleanup();
 }
 
 VimClient.prototype._onData = function (data) {
 	var str = data.toString('utf8');
-	var messages = str.trim().split("\n");
+	var messages = str.split("\n");
 	messages.forEach(this._onMessage.bind(this));
 };
 
@@ -182,6 +190,8 @@ var eventRe = /^([0-9]+):([a-zA-Z]+)=([0-9]+)(?: (.*))?$/,
 	replyRe = /^([0-9]+)(?: (.*))?$/;
 
 VimClient.prototype._onMessage = function (message) {
+	if (!message) return;
+	if (this.debug) console.log("got message", message);
 	// Must be authed before considering events
 	if (this.authed) {
 		var e = eventRe.exec(message);
@@ -217,7 +227,8 @@ VimClient.prototype._sendCommand = function (bufID, name, args) {
 	var seqno = this.maxSeqno++;
 	var body = argsToString(args);
 	this.socket.write((bufID || "0") + ":" + name + "!" + seqno + body + "\n");
-	console.log('sending command', bufID + ":" + name + "!" + seqno + body);
+	if (this.debug)
+		console.log('sending command', bufID, name, body);
 };
 
 VimClient.prototype._sendFunction = function (bufID, name, args, cb) {
@@ -225,6 +236,8 @@ VimClient.prototype._sendFunction = function (bufID, name, args, cb) {
 	var body = argsToString(args);
 	this.socket.write(bufID + ":" + name + "/" + seqno + body + "\n");
 	this.replyHandlers[seqno] = cb;
+	if (this.debug)
+		console.log('sending function', bufID, name, body.substr(1));
 };
 
 VimClient.prototype._processReply = function (seqno, body) {
@@ -259,6 +272,27 @@ VimClient.prototype._processEvent = function (bufID, name, seqno, body) {
 	}
 };
 
+VimClient.prototype._cleanup = function () {
+	this.buffers.forEach(function (buffer) {
+		buffer._cleanup();
+	});
+	this.removeAllListeners();
+};
+
+// This quits vim!
+// Only use if there are no modified buffers.
+// Prefer saveAndExit.
+VimClient.prototype.disconnect = function () {
+	this.socket.end("DISCONNECT\n");
+	this._cleanup();
+};
+
+// close connection without exiting vim
+VimClient.prototype.detach = function () {
+	this.socket.end("DETACH\n");
+	this._cleanup();
+};
+
 // register a key handler
 VimClient.prototype.key = function (key, handler) {
 	// don't register duplicates
@@ -272,34 +306,44 @@ VimClient.prototype.key = function (key, handler) {
 var eventHandlers = {
 	fileOpened: function (buffer, pathname) {
 		if (buffer) return;
+
+		buffer = this.buffersByPathname[pathname];
+		if (buffer) {
+			// buffer probably reopened
+			buffer.emit("fileOpened", pathname);
+			return;
+		}
+
 		// assign an id to this new buffer, and keep track of it
 		var bufID = this.maxBufID++;
 		buffer = this.buffers[bufID] = new VimBuffer(this, bufID);
-		if (!pathname) pathname = "";
+		if (pathname) this.buffersByPathname[pathname] = buffer;
+		else pathname = "";
 		buffer.pathname = pathname;
-		console.log("assign buffer id " + this.id + " to " + this.pathname);
+		//console.log("assign buffer id " + buffer.id + " to " + buffer.pathname);
 		// It simplifies things to assign the buffer number here,
 		// but we don't want to listen for document events yet.
-		buffer._putBufferNumber(pathname);
+		this._putBuffer(buffer, pathname);
 		buffer.stopDocumentListen();
 		this.emit("newBuffer", buffer);
 	},
 
 	keyAtPos: function (buffer, keyName, offset, lnumCol) {
-		console.log("key command " + keyName + " pressed");
+		//console.log("key command " + keyName + " pressed");
 		var fn = this.keyHandlers[keyName];
 		if (typeof fn == "function") {
 			if (lnumCol == null) {
-				lnumCol = offset;
-				offset = null;
+				fn(buffer, offset);
+			} else {
+				//console.log(lnumCol, typeof lnumCol);
+				var coords = lnumCol.split("/");
+				fn(buffer, offset, coords[0], coords[1]);
 			}
-			var coords = lnumCol.split("/");
-			fn(buffer, offset, coords[0], coords[1]);
 		}
 	},
 
 	killed: function (buffer) {
-		delete this.buffers[buffer.id];
+		buffer._cleanup();
 	}
 };
 
@@ -354,4 +398,5 @@ VimClient.prototype.saveAndExit = function (cb) {
 	this._sendFunction(0, "saveAndExit", [], cb);
 };
 
+VimClient.parseArgs = parseArgs;
 module.exports = VimClient;

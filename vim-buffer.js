@@ -1,12 +1,18 @@
 var util = require('util'),
 	EventEmitter = require('events').EventEmitter;
 
+// delay circular dependency require
+function parseArgs(args) {
+	parseArgs = require('./vim-client').parseArgs;
+	return parseArgs(args);
+}
+
 // Represents a Vim/Netbeans buffer
 function VimBuffer(client, id) {
 	this.client = client;
 	this.id = id;
-	this.maxAnnoTypeNum = 0;
-	this.maxAnnoSerNum = 0;
+	this.maxAnnoTypeNum = 1;
+	this.maxAnnoSerNum = 1;
 	this.annoTypeNums = {};
 }
 VimBuffer.prototype = {
@@ -29,6 +35,14 @@ VimBuffer.prototype._sendFunction = function (name, args, cb) {
 	this.client._sendFunction(this.id, name, args, cb);
 };
 
+VimBuffer.prototype._cleanup = function () {
+	this.removeAllListeners();
+	delete this.client.buffers[this.id];
+	if (this.buffersByPathname[this.pathname] == this) {
+		delete this.buffersByPathname[this.pathname];
+	}
+};
+
 VimBuffer.prototype.addAnno = function (type, offset) {
 	var typeNum = this.annoTypeNums[type.id] || this.defineAnnoType(type);
 	var serNum = this.maxAnnoSerNum++;
@@ -40,18 +54,26 @@ VimBuffer.prototype.close = function () {
 	this._sendCommand("close");
 };
 
+function processColor(color) {
+	return typeof color == "string" ?
+		color[0] == "#" ? // convert hex to number
+			parseInt(color.substr(1), 16) : color :
+		typeof color == "number" ?
+			color : -Infinity; // color "none" sentinel;
+}
+
 VimBuffer.prototype.defineAnnoType = function (type) {
 	var typeNum = this.maxAnnoTypeNum++;
 	this.annoTypeNums[type.id] = typeNum;
 	this._sendCommand("defineAnnoType",
-		typeNum, type.name, "", type.glyphFile, type.fg, type.bg);
+		[typeNum, type.name, "", type.glyph,
+		processColor(type.fg), processColor(type.bg)]);
 	return typeNum;
 };
 
 VimBuffer.prototype.editFile = function (pathname) {
 	this.pathname = pathname;
 	this._sendCommand("editFile", pathname);
-	// is this event possible?
 	// do we need to listen for fileOpened?
 };
 
@@ -67,12 +89,12 @@ VimBuffer.prototype.insertDone = function () {
 	this._sendCommand("insertDone");
 };
 
-VimBuffer.prototype.netbeansBuffer = function (own) {
-	this._sendCommand("netbeansBuffer", (arguments.length == 0) || !!own);
+VimBuffer.prototype.netbeansBuffer = function fn(own) {
+	this._sendCommand("netbeansBuffer", !!own);
 };
 
-VimBuffer.prototype.removeAnno = function () {
-	this._sendCommand("removeAnno");
+VimBuffer.prototype.removeAnno = function (serNum) {
+	this._sendCommand("removeAnno", serNum);
 };
 
 VimBuffer.prototype.save = function () {
@@ -83,10 +105,10 @@ VimBuffer.prototype.saveDone = function () {
 	this._sendCommand("saveDone");
 };
 
-VimBuffer.prototype.setDot = function (offset) {
-	if (arguments.length == 2) {
+VimBuffer.prototype.setDot = function fn(offset) {
+	if (fn.arguments.length == 2) {
 		// lnum/col
-		offset += "/" + arguments[1];
+		offset += "/" + fn.arguments[1];
 	}
 	this._sendCommand("setDot", offset);
 };
@@ -100,8 +122,8 @@ VimBuffer.prototype.setModified = function (isModified) {
 	this._sendCommand("setModified", !!isModified);
 };
 
-VimBuffer.prototype.setModtime = function (time) {
-	this._sendCommand("setModtime", time);
+VimBuffer.prototype.setModtime = function (date) {
+	this._sendCommand("setModtime", Math.floor(date.getTime()/1000));
 };
 
 VimBuffer.prototype.setReadOnly = function () {
@@ -139,7 +161,9 @@ VimBuffer.prototype.getAnno = function (serNum, cb) {
 };
 
 VimBuffer.prototype.getModified = function (cb) {
-	this._sendFunction("getModified", [], cb);
+	this._sendFunction("getModified", [], function (modified) {
+		cb(!!modified)
+	});
 };
 
 VimBuffer.prototype.getText = function (cb) {
@@ -149,22 +173,23 @@ VimBuffer.prototype.getText = function (cb) {
 };
 
 VimBuffer.prototype.insert = function (offset, text, cb) {
-	this._sendFunction("insert", [offset, text], function (msg) {
+	this._sendFunction("insert", [offset, String(text)], function (msg) {
+		var error = null;
 		if (msg && msg[0] == '!') {
 			// reply is unquoted
-			var error = msg.substr(1);
+			error = msg.substr(1);
 		}
-		cb(error);
+		cb && cb(error);
 	});
 };
 
-VimBuffer.prototype.remove = function (offset, text) {
+VimBuffer.prototype.remove = function (offset, text, cb) {
 	this._sendFunction("remove", [offset, text], function (msg) {
 		if (msg && msg[0] == '!') {
 			// reply is unquoted
 			var error = msg.substr(1);
 		}
-		cb(error);
+		cb && cb(error);
 	});
 };
 
