@@ -271,7 +271,7 @@ A specific buffer in a Vim client that a VimServer controls.
     * **offset** - (`number`) position in buffer
     * **length** - (`number`) bytes removed
 
-* **killed**() - The user deleted a file and the buffer has been removed.
+* **killed**() - The user deleted a file and the buffer has been removed. Event listeners will be cleaned up.
 
 * **save**() - The buffer has been saved and is now unmodified. Only fired when enabled with `startDocumentListen`.
 

@@ -101,7 +101,9 @@ function parseArgs(str, args) {
 				if (char == ' ') {
 					args.push(Number(str.substring(tokStart, i)));
 					state = betweenArgsState;
-				} else if ((char < '0' || char > '9') && char != '.') {
+				} else if ((char < '0' || char > '9') &&
+					char != '.' &&
+					char != '-') {
 					// not a number after all
 					state = inUnquotedStringState;
 				}
@@ -228,14 +230,15 @@ VimClient.prototype._sendCommand = function (bufID, name, args) {
 	var body = argsToString(args);
 	this.socket.write((bufID || "0") + ":" + name + "!" + seqno + body + "\n");
 	if (this.debug)
-		console.log('sending command', bufID, name, body);
+		console.log('sending command', bufID, name, body.substr(1));
 };
 
-VimClient.prototype._sendFunction = function (bufID, name, args, cb) {
+VimClient.prototype._sendFunction = function (bufID, name, args, cb, rawReply) {
 	var seqno = this.maxSeqno++;
 	var body = argsToString(args);
 	this.socket.write(bufID + ":" + name + "/" + seqno + body + "\n");
 	this.replyHandlers[seqno] = cb;
+	cb._raw = rawReply;
 	if (this.debug)
 		console.log('sending function', bufID, name, body.substr(1));
 };
@@ -244,7 +247,8 @@ VimClient.prototype._processReply = function (seqno, body) {
 	var cb = this.replyHandlers[seqno];
 	if (typeof cb == "function") {
 		delete this.replyHandlers[seqno];
-		cb(body);
+		if (cb._raw) cb(body);
+		else cb.apply(this, parseArgs(body));
 	} else {
 		console.log("got reply for unknown seqno " + seqno + ": " + body);
 	}
@@ -256,7 +260,6 @@ VimClient.prototype._processEvent = function (bufID, name, seqno, body) {
 	var args = [name, buffer];
 	if (body) parseArgs(body, args);
 	var builtin = eventHandlers[name];
-	//console.log(args);
 	// builtin gets passed the buffer even if it is null
 	if (builtin) builtin.apply(this, args.slice(1));
 	// do we really need to emit it in both places?
@@ -314,11 +317,15 @@ var eventHandlers = {
 			return;
 		}
 
+		if (pathname == "") {
+			// vim gives an error if we putBufferNumber these
+			return;
+		}
+
 		// assign an id to this new buffer, and keep track of it
 		var bufID = this.maxBufID++;
 		buffer = this.buffers[bufID] = new VimBuffer(this, bufID);
-		if (pathname) this.buffersByPathname[pathname] = buffer;
-		else pathname = "";
+		this.buffersByPathname[pathname] = buffer;
 		buffer.pathname = pathname;
 		//console.log("assign buffer id " + buffer.id + " to " + buffer.pathname);
 		// It simplifies things to assign the buffer number here,
@@ -385,8 +392,9 @@ VimClient.prototype._specialKeys = function (keys) {
 };
 
 VimClient.prototype.getCursor = function (cb) {
+	var bufs = this.buffers;
 	this._sendFunction(0, "getCursor", [], function (bufID, lnum, col, off) {
-		cb(this.buffers[bufID], lnum, col, off);
+		cb(bufs[bufID], lnum, col, off);
 	});
 };
 

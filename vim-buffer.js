@@ -31,15 +31,16 @@ VimBuffer.prototype._sendCommand = function (name, args) {
 	this.client._sendCommand(this.id, name, args);
 };
 
-VimBuffer.prototype._sendFunction = function (name, args, cb) {
-	this.client._sendFunction(this.id, name, args, cb);
+VimBuffer.prototype._sendFunction = function (name, args, cb, rawReply) {
+	this.client._sendFunction(this.id, name, args, cb, rawReply);
 };
 
 VimBuffer.prototype._cleanup = function () {
 	this.removeAllListeners();
-	delete this.client.buffers[this.id];
-	if (this.buffersByPathname[this.pathname] == this) {
-		delete this.buffersByPathname[this.pathname];
+	var client = this.client;
+	delete client.buffers[this.id];
+	if (client.buffersByPathname[this.pathname] == this) {
+		delete client.buffersByPathname[this.pathname];
 	}
 };
 
@@ -66,7 +67,7 @@ VimBuffer.prototype.defineAnnoType = function (type) {
 	var typeNum = this.maxAnnoTypeNum++;
 	this.annoTypeNums[type.id] = typeNum;
 	this._sendCommand("defineAnnoType",
-		[typeNum, type.name, "", type.glyph,
+		[typeNum, type.name, type.tooltip, type.glyph,
 		processColor(type.fg), processColor(type.bg)]);
 	return typeNum;
 };
@@ -180,7 +181,7 @@ VimBuffer.prototype.insert = function (offset, text, cb) {
 			error = msg.substr(1);
 		}
 		cb && cb(error);
-	});
+	}, true);
 };
 
 VimBuffer.prototype.remove = function (offset, text, cb) {
@@ -190,7 +191,7 @@ VimBuffer.prototype.remove = function (offset, text, cb) {
 			var error = msg.substr(1);
 		}
 		cb && cb(error);
-	});
+	}, true);
 };
 
 module.exports = VimBuffer;
