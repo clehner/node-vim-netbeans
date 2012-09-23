@@ -1,7 +1,7 @@
 node-vim-netbeans
 ==========
 
-An implementation of the [Vim Netbeans Protocol](http://vimdoc.sourceforge.net/htmldoc/netbeans.html), a socket interface designed for Vim integration into an IDE.
+An implementation of the [Netbeans Protocol](http://vimdoc.sourceforge.net/htmldoc/netbeans.html), a socket interface designed for Vim integration into an IDE.
 
 **vim-netbeans** allows you to create servers that Vim clients can connect to. You can control the Vim clients and get notifications about what they are doing.
 
@@ -12,8 +12,38 @@ Installation
 
     [sudo] npm install vim-netbeans
 
+Example
+-------
+
+```js
+var nb = require("vim-netbeans");
+var server = new nb.VimServer();
+server.on("clientAuthed", function (vim) {
+
+	vim.on("insert", function (buffer, offset, text) {
+		console.log("Inserted text at " + offset + ": " + text);
+	});
+
+	vim.on("remove", function (buffer, offset, length) {
+		console.log("Removed " + length + " bytes at " + offset);
+	});
+});
+server.listen();
+```
+
+See `example.js` for a longer example.
+
+Connecting
+----------
+
+To connect to your NetBeans server, launch Vim with `-nb` or use the command `:nbs` in Vim.  To close the connection, Use `:nbc`.
+
+Host, port, and password can be specified with :nbs:{hostname}:{port}:{password}
+
+Connection information can also be read from a file or environment. See the [Vim Documentation](http://vimdoc.sourceforge.net/htmldoc/netbeans.html#netbeans-run).
+
 API Documentation
-===
+=================
 
 This API is an abstraction over the [Vim Netbeans Protocol](http://vimdoc.sourceforge.net/htmldoc/netbeans.html), a socket interface intended for Vim integration into an IDE.
 
