@@ -1,7 +1,9 @@
 {
   "name": "vim-netbeans",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A server for Vim clients using the NetBeans Protocol.",
+  "author": "Charles Lehner",
+  "license": "MIT",
   "main": "lib/index.js",
   "repository": {
     "type": "git",
@@ -14,7 +16,5 @@
   ],
   "directories": {
     "lib": "lib"
-  },
-  "author": "Charles Lehner",
-  "license": "MIT"
+  }
 }

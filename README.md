@@ -1,5 +1,5 @@
 node-vim-netbeans
-==========
+=================
 
 An implementation of the [Netbeans Protocol](http://vimdoc.sourceforge.net/htmldoc/netbeans.html), a socket interface designed for Vim integration into an IDE.
 
@@ -248,6 +248,13 @@ A specific buffer in a Vim client that a VimServer controls.
 * **getLength**(callback) Get the length of the buffer in bytes.
     * **callback** - (`function(length)`)
         * **length** - (`number`) length of the buffer
+
+* **getCursor**(callback) Get the cursor position if it is in this buffer
+    * **callback** - (`function(lnum, col, offset)`)
+		Values are null if this buffer is not the current buffer.
+        * **lnum** - (`number|null`) line number of the cursor (from 1)
+        * **col** - (`number|null`) column the cursor (in bytes, from 0)
+        * **offset** - (`number|null`) byte offset of the cursor the buffer
 
 * **getAnno**(id, callback) Find an annotation in the buffer.
     * **id** - (`number`) ID of the annotation, from `addAnno`
