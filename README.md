@@ -54,6 +54,7 @@ A server that listens for connections from Vim.
 ### VimServer Properties
 
 * **server** (`net.Server`) underlying socket server
+* **clients** (`array<VimClient>`) Vim clients connected to this server
 
 ### VimServer Functions
 
