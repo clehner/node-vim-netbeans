@@ -55,6 +55,7 @@ A server that listens for connections from Vim.
 
 * **server** (`net.Server`) underlying socket server
 * **clients** (`array<VimClient>`) Vim clients connected to this server
+* **httpServer** (`http.Server`) optional HTTP server for multiplexing
 
 ### VimServer Functions
 
@@ -68,6 +69,9 @@ A server that listens for connections from Vim.
     * **callback** - (`function`) called when the port is bound to the server
 
   See also [net.Server.listen(port)](http://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback).
+
+* **handleHTTP**(server) - Multiplex HTTP on the same port as the NetBeans server.
+    * **server** - (`http.Server`) the HTTP server to pass requests to
 
 ### VimServer Events
 
