@@ -59,14 +59,17 @@ A server that listens for connections from Vim.
 ### VimServer Functions
 
 * **new VimServer**([options]) - Create and configure a new Vim NetBeans server, with properties as follows:
-    * **port** - (`number|string`: defaults to 3219) the server binding port
     * **auth** - (`function(password, client):boolean`: defaults to comparison with `options.password`) Authorization function for a newly connected client
     * **password** - (`string|null`: defaults to null) Password that Vim clients should use when connecting. Ignored if `options.auth` is specified. Otherwise, if `options.password` is null, any password is accepted.
     * **debug** - (`boolean`: defaults to false) If true, socket communication will be printed.
 
-* **listen**([port], [callback]) - Bind the server to a port
-    * **port** - (`number|string`) overwrite the constructor **port** parameter
+* **listen**([port], [host], [backlog], [callback]) - Bind the server to a port.
+    * **port** - (`number|string`: defaults to 3219) the port number to bind to connections
+    * **backlog** - (`number|string`) maximum length of the queue of pending
+    * **host** - (`string`: defaults to any IPv4) the hostname to bind to
     * **callback** - (`function`) called when the port is bound to the server
+
+  See also [net.Server.listen(port)](http://nodejs.org/api/net.html#net_server_listen_port_host_backlog_callback).
 
 ### VimServer Events
 
