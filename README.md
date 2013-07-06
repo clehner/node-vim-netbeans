@@ -54,13 +54,10 @@ A server that listens for connections from Vim.
 ### VimServer Properties
 
 * **server** (`net.Server`) underlying socket server
-* **auth** (`function`) authorization function for connecting clients
 
 ### VimServer Functions
 
 * **new VimServer**([options]) - Create and configure a new Vim NetBeans server, with properties as follows:
-    * **auth** - (`function(password, client):boolean`: defaults to comparison with `options.password`) Authorization function for a newly connected client
-    * **password** - (`string|null`: defaults to null) Password that Vim clients should use when connecting. Ignored if `options.auth` is specified. Otherwise, if `options.password` is null, any password is accepted.
     * **debug** - (`boolean`: defaults to false) If true, socket communication will be printed.
 
 * **listen**([port], [host], [backlog], [callback]) - Bind the server to a port.
@@ -73,8 +70,9 @@ A server that listens for connections from Vim.
 
 ### VimServer Events
 
-* **clientAuthed**(client) - A vim client successfully connected and supplied an acceptable password.
+* **clientAuthed**(client, password) - A Vim client successfully connected and sent an AUTH event
     * **client** - (`VimClient`) the client that connected
+    * **password** - (`string`) the password the client supplied
 
 VimClient
 ---------
