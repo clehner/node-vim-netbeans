@@ -96,7 +96,7 @@ Represents a Vim program that has connected to a VimServer.
 
 * **disconnect**() - Break the connection and quit Vim. Only send when there are no unsaved changes. See also `saveAndExit`.
 
-* **detatch**() - Break the connection without exiting the editor.
+* **detach**() - Break the connection without exiting the editor.
 
 * **key**(key, listener) - Register a function to be called when the vim user presses a certain key. Once set, a key listener cannot be removed, but you can change the listener function by calling `key(key, ...)` again.
     * **key** - (`string`) Key name. Supported are:
