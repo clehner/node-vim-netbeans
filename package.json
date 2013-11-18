@@ -1,6 +1,6 @@
 {
   "name": "vim-netbeans",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "A server for Vim clients using the NetBeans Protocol.",
   "author": "Charles Lehner",
   "license": "MIT",

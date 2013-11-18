@@ -51,6 +51,11 @@ VimServer
 
 A server that listens for connections from Vim.
 
+### VimServer Constants
+
+* **defaultPort** (`3219`) default Vim netbeans socket port
+* **defaultPassword** (`"changeme"`) default password that Vim connects with
+
 ### VimServer Properties
 
 * **server** (`net.Server`) underlying socket server
@@ -63,7 +68,7 @@ A server that listens for connections from Vim.
     * **debug** - (`boolean`: defaults to false) If true, socket communication will be printed.
 
 * **listen**([port], [host], [backlog], [callback]) - Bind the server to a port.
-    * **port** - (`number|string`: defaults to 3219) the port number to bind to connections
+    * **port** - (`number|string`: defaults to *defaultPort*) the port number to bind to connections
     * **backlog** - (`number|string`) maximum length of the queue of pending
     * **host** - (`string`: defaults to any IPv4) the hostname to bind to
     * **callback** - (`function`) called when the port is bound to the server
